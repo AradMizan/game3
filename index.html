@@ -302,7 +302,7 @@ const clock = new THREE.Clock();
 // לשמירת מצב הזוויות של המצלמה
 let pitch = 0;
 let yaw = 0;
-const sensitivity = 0.004;
+const sensitivity = 0.04;
 
 // העכבר משנה את הזוויות
 window.addEventListener('mousemove', (e) => {
@@ -339,7 +339,7 @@ function animate() {
   velocity.z -= velocity.z * 10.0 * delta;
 
   direction.z = Number(move.forward) - Number(move.backward);
-  direction.x = Number(move.left) - Number(move.right);
+  direction.x = Number(move.right) - Number(move.left);
   direction.normalize();
 
   // חשב תנועת וקטור בכיוון המצלמה
@@ -355,8 +355,8 @@ function animate() {
 
   if(move.forward) velocity.addScaledVector(forwardVector, accel * delta);
   if(move.backward) velocity.addScaledVector(forwardVector, -accel * delta);
-  if(move.right) velocity.addScaledVector(rightVector, accel * delta);
-  if(move.left) velocity.addScaledVector(rightVector, -accel * delta);
+  if(move.right) velocity.addScaledVector(rightVector, -accel * delta);
+  if(move.left) velocity.addScaledVector(rightVector, accel * delta);
 
   const moveX = velocity.x * delta;
   const moveZ = velocity.z * delta;
