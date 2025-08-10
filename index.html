@@ -76,7 +76,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 const CELL_SIZE = 6;
 const MAZE_ROWS = 11;
 const MAZE_COLS = 11;
-const WALL_HEIGHT = 3.5;
+const WALL_HEIGHT = 20;
 const TARGETS_TOTAL = 10;
 
 // --- סצינה, מצלמה, רנדרר ---
@@ -302,7 +302,7 @@ const clock = new THREE.Clock();
 // לשמירת מצב הזוויות של המצלמה
 let pitch = 0;
 let yaw = 0;
-const sensitivity = 0.002;
+const sensitivity = 0.004;
 
 // העכבר משנה את הזוויות
 window.addEventListener('mousemove', (e) => {
@@ -339,7 +339,7 @@ function animate() {
   velocity.z -= velocity.z * 10.0 * delta;
 
   direction.z = Number(move.forward) - Number(move.backward);
-  direction.x = Number(move.right) - Number(move.left);
+  direction.x = Number(move.left) - Number(move.right);
   direction.normalize();
 
   // חשב תנועת וקטור בכיוון המצלמה
