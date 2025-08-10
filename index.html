@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>3D Maze Shooter - No Pointer Lock with Timer</title>
+<style>
+  body, html {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #000;
+    color: white;
+    font-family: Arial, sans-serif;
+  }
+  #overlay {
+    position: fixed;
+    top: 10px; left: 10px;
+    z-index: 10;
+    background: rgba(0,0,0,0.4);
+    padding: 10px 15px;
+    border-radius: 6px;
+    font-size: 1.2rem;
+    user-select: none;
+  }
+  #crosshair {
+    position: fixed;
+    top: 50%; left: 50%;
+    width: 20px; height: 20px;
+    margin-left: -10px; margin-top: -10px;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #crosshair:before, #crosshair:after {
+    content: '';
+    position: absolute;
+    background: white;
+  }
+  #crosshair:before {
+    left: 9px; top: 0; width: 2px; height: 20px;
+  }
+  #crosshair:after {
+    top: 9px; left: 0; width: 20px; height: 2px;
+  }
+  #restartButton {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 15px 30px;
+    font-size: 1.2rem;
+    border: none;
+    border-radius: 8px;
+    background: #2196f3;
+    color: white;
+    cursor: pointer;
+    display: none;
+    z-index: 20;
+  }
+  #restartButton:hover {
+    background: #1769aa;
+  }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  Score: <span id="score">0</span> | Targets Left: <span id="targets">0</span> | Time: <span id="timer">0.00</span> s
+</div>
+
+<div id="crosshair"></div>
+<button id="restartButton">Restart Game</button>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+// --- קבועים ---
+const CELL_SIZE = 6;
+const MAZE_ROWS = 11;
+const MAZE_COLS = 11;
+const WALL_HEIGHT = 3.5;
+const TARGETS_TOTAL = 10;
+
+// --- סצינה, מצלמה, רנדרר ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x88ccee);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(0, 1.8, 0);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+// --- תאורה ---
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+hemiLight.position.set(0, 50, 0);
+scene.add(hemiLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(20, 40, 10);
+dirLight.castShadow = true;
+scene.add(dirLight);
+
+// --- רצפה ---
+const floorGeometry = new THREE.PlaneGeometry(CELL_SIZE * MAZE_COLS + 20, CELL_SIZE * MAZE_ROWS + 20);
+const floorMaterial = new THREE.MeshStandardMaterial({color: 0x6aa84f, roughness: 0.9});
+const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// --- מצב תנועה ---
+const move = {forward:false, backward:false, left:false, right:false};
+window.addEventListener('keydown', (e)=>{
+  if(e.code === 'KeyW') move.forward = true;
+  if(e.code === 'KeyS') move.backward = true;
+  if(e.code === 'KeyA') move.left = true;
+  if(e.code === 'KeyD') move.right = true;
+});
+window.addEventListener('keyup', (e)=>{
+  if(e.code === 'KeyW') move.forward = false;
+  if(e.code === 'KeyS') move.backward = false;
+  if(e.code === 'KeyA') move.left = false;
+  if(e.code === 'KeyD') move.right = false;
+});
+
+// --- מבוך - יצירת מערך פשוט ---
+function generateMaze(cols, rows) {
+  const grid = [];
+  for(let r=0; r<rows; r++) {
+    grid[r] = [];
+    for(let c=0; c<cols; c++) {
+      grid[r][c] = false;
+    }
+  }
+  for(let r=1; r<rows-1; r++) {
+    for(let c=1; c<cols-1; c++) {
+      grid[r][c] = Math.random() < 0.7;
+    }
+  }
+  grid[1][1] = true;
+  return grid;
+}
+
+// --- בניית קירות המבוך ---
+function buildMaze(grid) {
+  const wallGeometry = new THREE.BoxGeometry(CELL_SIZE, WALL_HEIGHT, CELL_SIZE);
+  const wallMaterial = new THREE.MeshStandardMaterial({color: 0x5b3a29, roughness: 0.9});
+  const offsetX = - (MAZE_COLS * CELL_SIZE) / 2 + CELL_SIZE/2;
+  const offsetZ = - (MAZE_ROWS * CELL_SIZE) / 2 + CELL_SIZE/2;
+
+  for(let r=0; r<MAZE_ROWS; r++) {
+    for(let c=0; c<MAZE_COLS; c++) {
+      if(!grid[r][c]) {
+        const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+        wall.position.set(offsetX + c * CELL_SIZE, WALL_HEIGHT/2, offsetZ + r * CELL_SIZE);
+        wall.castShadow = true;
+        wall.receiveShadow = true;
+        wall.userData.isWall = true;
+        scene.add(wall);
+      }
+    }
+  }
+}
+
+// --- מציאת תאים חופשיים ---
+function findFreeCells(grid) {
+  const freeCells = [];
+  for(let r=0; r<MAZE_ROWS; r++) {
+    for(let c=0; c<MAZE_COLS; c++) {
+      if(grid[r][c]) freeCells.push({r, c});
+    }
+  }
+  return freeCells;
+}
+
+// --- יצירת מטרות ---
+function createTarget(position) {
+  const geometry = new THREE.SphereGeometry(0.7, 16, 16);
+  const material = new THREE.MeshStandardMaterial({color: 0xff4444, metalness: 0.2, roughness: 0.5});
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.copy(position);
+  mesh.castShadow = true;
+  mesh.userData.hit = false;
+  return mesh;
+}
+
+// --- משתנים גלובליים ---
+const bullets = [];
+const targets = [];
+let score = 0;
+
+// --- יצירת המבוך והקירות ---
+let mazeGrid, freeCells, spawnCell, spawnPos;
+
+function setupGame(){
+  // נקה סצינה ממטרות וקירות קודמים (אלא אם זו הפעם הראשונה)
+  for(let i = scene.children.length - 1; i >= 0; i--) {
+    const obj = scene.children[i];
+    if(obj.userData.isWall || obj.userData.isTarget) {
+      scene.remove(obj);
+    }
+  }
+  bullets.length = 0;
+  targets.length = 0;
+  score = 0;
+  document.getElementById('score').textContent = score;
+
+  mazeGrid = generateMaze(MAZE_COLS, MAZE_ROWS);
+  buildMaze(mazeGrid);
+
+  freeCells = findFreeCells(mazeGrid);
+  spawnCell = freeCells[0] || {r:1, c:1};
+  spawnPos = new THREE.Vector3(
+    - (MAZE_COLS * CELL_SIZE) / 2 + CELL_SIZE/2 + spawnCell.c * CELL_SIZE,
+    1.8,
+    - (MAZE_ROWS * CELL_SIZE) / 2 + CELL_SIZE/2 + spawnCell.r * CELL_SIZE
+  );
+  camera.position.copy(spawnPos);
+  yaw = 0; pitch = 0;
+
+  placeTargets();
+
+  document.getElementById('restartButton').style.display = 'none';
+
+  timerStarted = false;
+  timer = 0;
+  document.getElementById('timer').textContent = '0.00';
+}
+
+function placeTargets(){
+  shuffleArray(freeCells);
+  const count = Math.min(TARGETS_TOTAL, freeCells.length);
+  for(let i=0; i<count; i++){
+    const {r,c} = freeCells[i];
+    const pos = new THREE.Vector3(
+      - (MAZE_COLS * CELL_SIZE) / 2 + CELL_SIZE/2 + c * CELL_SIZE,
+      1,
+      - (MAZE_ROWS * CELL_SIZE) / 2 + CELL_SIZE/2 + r * CELL_SIZE
+    );
+    const t = createTarget(pos);
+    t.userData.isTarget = true;
+    scene.add(t);
+    targets.push(t);
+  }
+  document.getElementById('targets').textContent = targets.length;
+}
+
+// --- ערבוב מערך ---
+function shuffleArray(arr) {
+  for(let i = arr.length -1; i>0; i--) {
+    const j = Math.floor(Math.random() * (i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+// --- בדיקת התנגשות בקיר ---
+function collidesWithWall(pos) {
+  const radius = 0.35;
+  for(const obj of scene.children){
+    if(obj.userData.isWall){
+      const dx = Math.abs(pos.x - obj.position.x);
+      const dz = Math.abs(pos.z - obj.position.z);
+      const halfCell = CELL_SIZE / 2;
+      if(dx < halfCell + radius && dz < halfCell + radius) return true;
+    }
+  }
+  return false;
+}
+
+// --- ירי ---
+function shoot(){
+  const origin = new THREE.Vector3();
+  origin.setFromMatrixPosition(camera.matrixWorld);
+  const direction = new THREE.Vector3();
+  camera.getWorldDirection(direction);
+  const geometry = new THREE.SphereGeometry(0.1, 8, 8);
+  const material = new THREE.MeshStandardMaterial({emissive: 0xffffbb, emissiveIntensity: 0.9, color: 0xfff1d0});
+  const bullet = new THREE.Mesh(geometry, material);
+  bullet.position.copy(origin);
+  bullet.userData.velocity = direction.multiplyScalar(60);
+  bullet.userData.life = 3;
+  scene.add(bullet);
+  bullets.push(bullet);
+}
+
+window.addEventListener('mousedown', e=>{
+  if(e.button === 0) shoot();
+});
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// --- תנועה ומשחקיות ---
+const velocity = new THREE.Vector3();
+const direction = new THREE.Vector3();
+const clock = new THREE.Clock();
+
+// לשמירת מצב הזוויות של המצלמה
+let pitch = 0;
+let yaw = 0;
+const sensitivity = 0.002;
+
+// העכבר משנה את הזוויות
+window.addEventListener('mousemove', (e) => {
+  yaw -= e.movementX * sensitivity;
+  pitch -= e.movementY * sensitivity;
+  pitch = Math.min(Math.max(pitch, -Math.PI/2), Math.PI/2);
+
+  // הפעלת הטיימר בפעם הראשונה שמזיזים את העכבר
+  if(!timerStarted){
+    timerStarted = true;
+  }
+});
+
+// טיימר
+let timerStarted = false;
+let timer = 0;
+
+// עדכון התצוגה של הטיימר
+function updateTimer(delta){
+  if(timerStarted && targets.length > 0){
+    timer += delta;
+    document.getElementById('timer').textContent = timer.toFixed(2);
+  }
+}
+
+function animate() {
+  const delta = Math.min(0.05, clock.getDelta());
+
+  // עדכון זוויות המצלמה
+  camera.rotation.set(pitch, yaw, 0, 'YXZ');
+
+  // תנועה בכיוון ההסתכלות
+  velocity.x -= velocity.x * 10.0 * delta;
+  velocity.z -= velocity.z * 10.0 * delta;
+
+  direction.z = Number(move.forward) - Number(move.backward);
+  direction.x = Number(move.right) - Number(move.left);
+  direction.normalize();
+
+  // חשב תנועת וקטור בכיוון המצלמה
+  const forwardVector = new THREE.Vector3();
+  camera.getWorldDirection(forwardVector);
+  forwardVector.y = 0;
+  forwardVector.normalize();
+
+  const rightVector = new THREE.Vector3();
+  rightVector.crossVectors(camera.up, forwardVector).normalize();
+
+  const accel = 200;
+
+  if(move.forward) velocity.addScaledVector(forwardVector, accel * delta);
+  if(move.backward) velocity.addScaledVector(forwardVector, -accel * delta);
+  if(move.right) velocity.addScaledVector(rightVector, accel * delta);
+  if(move.left) velocity.addScaledVector(rightVector, -accel * delta);
+
+  const moveX = velocity.x * delta;
+  const moveZ = velocity.z * delta;
+
+  const newPos = camera.position.clone();
+  newPos.x += moveX;
+  newPos.z += moveZ;
+
+  if(!collidesWithWall(newPos)){
+    camera.position.copy(newPos);
+  } else {
+    const tryX = camera.position.clone();
+    tryX.x += moveX;
+    tryX.z = camera.position.z;
+    if(!collidesWithWall(tryX)) camera.position.copy(tryX);
+    else {
+      const tryZ = camera.position.clone();
+      tryZ.z += moveZ;
+      tryZ.x = camera.position.x;
+      if(!collidesWithWall(tryZ)) camera.position.copy(tryZ);
+    }
+  }
+
+  // עדכון כדורים
+  for(let i = bullets.length -1; i >= 0; i--){
+    const b = bullets[i];
+    const velStep = b.userData.velocity.clone().multiplyScalar(delta);
+    b.position.add(velStep);
+    b.userData.life -= delta;
+
+    for(let j = targets.length -1; j >= 0; j--){
+      const t = targets[j];
+      if(t.userData.hit) continue;
+      const dist = b.position.distanceTo(t.position);
+      if(dist < 0.8 + 0.1){
+        t.userData.hit = true;
+        scene.remove(t);
+        targets.splice(j, 1);
+
+        scene.remove(b);
+        bullets.splice(i, 1);
+
+        score += 10;
+        document.getElementById('score').textContent = score;
+        document.getElementById('targets').textContent = targets.length;
+
+        if(targets.length === 0){
+          // סיימנו את המשחק - נעצור טיימר ונראה כפתור אתחול
+          timerStarted = false;
+          document.getElementById('restartButton').style.display = 'block';
+        }
+        break;
+      }
+    }
+    if(b.userData.life <= 0){
+      scene.remove(b);
+      bullets.splice(i, 1);
+    }
+  }
+
+  updateTimer(delta);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+
+// --- אתחול המשחק בלחיצה על הכפתור ---
+const restartButton = document.getElementById('restartButton');
+restartButton.addEventListener('click', () => {
+  setupGame();
+});
+
+setupGame();
+animate();
+</script>
+</body>
+</html>
