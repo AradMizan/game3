@@ -76,7 +76,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 const CELL_SIZE = 6;
 const MAZE_ROWS = 11;
 const MAZE_COLS = 11;
-const WALL_HEIGHT = 20;
+const WALL_HEIGHT = 5;
 const TARGETS_TOTAL = 10;
 
 // --- סצינה, מצלמה, רנדרר ---
@@ -302,7 +302,7 @@ const clock = new THREE.Clock();
 // לשמירת מצב הזוויות של המצלמה
 let pitch = 0;
 let yaw = 0;
-const sensitivity = 0.04;
+const sensitivity = 0.01;
 
 // העכבר משנה את הזוויות
 window.addEventListener('mousemove', (e) => {
